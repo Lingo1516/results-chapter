@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>第四章研究結果產生器｜貼上問卷資料，自動算好論文表格</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Microsoft JhengHei", "PingFang TC", "Noto Sans TC", sans-serif;
+         background: #f4f6f8; color: #1a1a1a; font-size: 18px; line-height: 1.65; }
+  header { background: #1F3864; color: #fff; padding: 20px; }
+  header h1 { font-size: 27px; letter-spacing: 1px; }
+  header p { font-size: 16px; opacity: .88; margin-top: 3px; }
+  main { max-width: 1020px; margin: 0 auto; padding: 20px 16px 60px; }
+  .card { background: #fff; border: 1px solid #d5dbe3; border-radius: 10px;
+          padding: 22px; margin-bottom: 18px; }
+  .card h2 { font-size: 22px; color: #1F3864; margin-bottom: 10px;
+             border-bottom: 2px solid #1F3864; padding-bottom: 6px; }
+  .card h3 { font-size: 20px; color: #1F3864; margin: 20px 0 8px; }
+  label { display: block; font-weight: bold; margin: 12px 0 5px; }
+  input[type=text], input[type=number], select, textarea {
+    font-size: 17px; padding: 9px 10px; border: 1.5px solid #9db2cc; border-radius: 8px;
+    font-family: inherit; }
+  textarea { width: 100%; min-height: 190px; font-size: 14px; line-height: 1.45; }
+  button { font-family: inherit; font-size: 19px; font-weight: bold; cursor: pointer;
+    border-radius: 8px; padding: 12px 24px; border: 1.5px solid #1F3864;
+    background: #1F3864; color: #fff; margin: 8px 6px 0 0; }
+  button.sub { background: #fff; color: #1F3864; }
+  .hint { font-size: 15.5px; color: #555; margin-top: 8px; }
+  .plain { background: #eef6ee; border: 1px solid #b7d8b7; border-radius: 8px;
+           padding: 12px 16px; margin: 12px 0; font-size: 16.5px; }
+  .plain b { color: #2e6b2e; }
+  table { border-collapse: collapse; width: 100%; margin: 10px 0 4px; font-size: 16.5px; }
+  th, td { border: 1px solid #b9c4d0; padding: 7px 10px; text-align: center; }
+  th { background: #eaf0f7; color: #1F3864; }
+  td.l, th.l { text-align: left; }
+  .tblwrap { overflow-x: auto; }
+  .cap { font-weight: bold; margin-top: 16px; }
+  .note { font-size: 15px; color: #444; margin: 2px 0 10px; }
+  ul.points { margin: 6px 0 6px 22px; }
+  ul.points li { margin: 3px 0; }
+  .cls-table td { padding: 5px 8px; }
+  .cls-table input[type=text] { width: 130px; padding: 5px 8px; font-size: 16px; }
+  .cls-table select { padding: 5px; font-size: 16px; }
+  .row2 { display: flex; gap: 16px; flex-wrap: wrap; }
+  .row2 > div { flex: 1; min-width: 150px; }
+  #results { display: none; }
+  .sig { color: #C00000; font-weight: bold; }
+  @media print { header, .noprint { display: none; } body { background: #fff; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>第四章研究結果產生器</h1>
+  <p>問卷資料貼進來，樣本結構、信度、描述統計、t 檢定／ANOVA、相關與假設彙整，照論文格式一次算好</p>
+</header>
+<main>
+  <div class="card noprint">
+    <h2>① 貼上問卷資料</h2>
+    <p>從 Excel 或 Google 表單的試算表直接複製貼上：第一列是欄名，一列一位填答者。背景變項（性別、年級…）用文字或代碼都可以；量表題用分數，或「非常同意～非常不同意」這類文字也可以。下面放了一份 60 人的示範資料，先按「開始分析」看它跑出什麼，再換成你的資料。</p>
+    <label>問卷資料（第一列是欄名）</label>
+    <textarea id="rawData" spellcheck="false"></textarea>
+    <div class="row2">
+      <div><label>量表最小值</label><input type="number" id="scaleMin" value="1" style="width:100%"></div>
+      <div><label>量表最大值</label><input type="number" id="scaleMax" value="5" style="width:100%"></div>
+      <div><label>研究題目（選填，會出現在匯出檔案）</label><input type="text" id="titleInput" placeholder="例：大學生對校園餐廳服務品質、滿意度與忠誠度之研究" style="width:100%"></div>
+    </div>
+    <button onclick="classify()">下一步：確認每一欄是什麼</button>
+    <p class="hint">統計全部在你自己的瀏覽器裡計算，資料不會上傳到任何地方。</p>
+  </div>
+
+  <div class="card noprint" id="clsCard" style="display:none">
+    <h2>② 確認每一欄是什麼</h2>
+    <p>系統先猜好了，請檢查一次：同一個構面的題目，「構面」要填同一個名稱（例如都填「滿意度」）；反向題打勾，系統會先換算分數（新分數＝最小值＋最大值－原分數）再計算。</p>
+    <div class="tblwrap"><table class="cls-table">
+      <thead><tr><th class="l">欄名</th><th>這一欄是</th><th>構面（量表題才填）</th><th>反向題</th></tr></thead>
+      <tbody id="clsBody"></tbody>
+    </table></div>
+    <p class="hint" id="clsSummary"></p>
+    <button onclick="runAnalysis()">開始分析</button>
+  </div>
+
+  <div id="results">
+    <div class="card">
+      <h2>③ 第四章的表格與判讀重點</h2>
+      <p class="hint">每一節先給表格，下面「統計重點」是寫內文時要交代的數字。數字都是你的資料算出來的，可以直接對照著寫；判讀用的標準是常見慣例，寫進論文時要註明出處。</p>
+      <button class="sub noprint" onclick="copyAll()">複製全部結果（純文字）</button>
+      <button class="sub noprint" onclick="downloadWord()">下載 Word 檔</button>
+      <div id="report"></div>
+    </div>
+  </div>
+
+  <div class="card noprint">
+    <h2>常見問題（白話版）</h2>
+    <h3>兩組用 t 檢定、三組以上用 ANOVA，怎麼分？</h3>
+    <p>看背景變項有幾個組：性別這種只有兩組的，用獨立樣本 t 檢定；年級這種三組以上的，用單因子變異數分析（ANOVA）。人數不到 2 人的組不納入檢定，表格下面會註明。t 檢定會先看 Levene 檢定，兩組分散程度差太多時，自動改用 Welch 的算法，跟 SPSS 印出來的第二列一樣。</p>
+    <h3>事後比較為什麼用 Scheffé？</h3>
+    <p>ANOVA 只告訴你「這幾組不全部一樣」，沒說是哪兩組不一樣，所以要再做事後比較。Scheffé 是國內論文最常見的做法，各組人數不一樣多也能用，缺點是比較嚴格：有時 ANOVA 顯著、兩兩比卻都沒顯著，就照實寫，不要硬湊。指導教授指定別的方法時，再用 SPSS 補跑那一張表就好。</p>
+    <h3>構面分數怎麼算？有人漏答怎麼辦？</h3>
+    <p>構面分數＝這個構面所有題目的平均（反向題先換算）。某位填答者在某個構面有漏答，這個構面就不算他，其他構面照算（跟 SPSS 預設一樣）。每一節的統計重點會寫明每個構面實際用了幾份。</p>
+    <h3>這個工具不做什麼？</h3>
+    <p>迴歸分析、中介、調節、因素分析與結構方程模式（SEM）這裡沒有。第四章如果需要這些，請用 SPSS／AMOS 等軟體跑，再把結果表貼進你的章節。</p>
+  </div>
+</main>
+<script id="engine">
+/* ---------- 基本統計 ---------- */
+function mean(a) { return a.reduce(function (s, x) { return s + x; }, 0) / a.length; }
+function variance(a) {
+  if (a.length < 2) return 0;
+  var m = mean(a);
+  return a.reduce(function (s, x) { return s + (x - m) * (x - m); }, 0) / (a.length - 1);
+}
+function sd(a) { return Math.sqrt(variance(a)); }
+
+/* ---------- 分布 p 值（不完全貝他函數） ---------- */
+function betacf(a, b, x) {
+  var MAXIT = 200, EPS = 3e-12, FPMIN = 1e-300;
+  var qab = a + b, qap = a + 1, qam = a - 1;
+  var c = 1, d = 1 - qab * x / qap;
+  if (Math.abs(d) < FPMIN) d = FPMIN;
+  d = 1 / d;
+  var h = d;
+  for (var m = 1; m <= MAXIT; m++) {
+    var m2 = 2 * m;
+    var aa = m * (b - m) * x / ((qam + m2) * (a + m2));
+    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d; h *= d * c;
+    aa = -(a + m) * (qab + m) * x / ((a + m2) * (qap + m2));
+    d = 1 + aa * d; if (Math.abs(d) < FPMIN) d = FPMIN;
+    c = 1 + aa / c; if (Math.abs(c) < FPMIN) c = FPMIN;
+    d = 1 / d;
+    var del = d * c; h *= del;
+    if (Math.abs(del - 1) < EPS) break;
+  }
+  return h;
+}
+function betainc(a, b, x) {
+  if (x <= 0) return 0;
+  if (x >= 1) return 1;
+  var bt = Math.exp(lgamma(a + b) - lgamma(a) - lgamma(b)
+    + a * Math.log(x) + b * Math.log(1 - x));
+  if (x < (a + 1) / (a + b + 2)) return bt * betacf(a, b, x) / a;
+  return 1 - bt * betacf(b, a, 1 - x) / b;
+}
+function lgamma(x) {
+  var c = [76.18009172947146, -86.50532032941677, 24.01409824083091,
+           -1.231739572450155, 0.001208650973866179, -0.0005395239384953];
+  var y = x, tmp = x + 5.5;
+  tmp -= (x + 0.5) * Math.log(tmp);
+  var ser = 1.000000000190015;
+  for (var j = 0; j < 6; j++) ser += c[j] / ++y;
+  return -tmp + Math.log(2.5066282746310005 * ser / x);
+}
+function tPValue(t, df) {  /* 雙尾 */
+  var x = df / (df + t * t);
+  return betainc(df / 2, 0.5, x);
+}
+function fPValue(f, df1, df2) {
+  if (f <= 0) return 1;
+  var x = df2 / (df2 + df1 * f);
+  return betainc(df2 / 2, df1 / 2, x);
+}
+
+/* ---------- 檢定 ---------- */
+function cronbachAlpha(itemCols) {  /* itemCols: 每題一個數列（同樣受試者、已剔除缺值） */
+  var k = itemCols.length;
+  if (k < 2) return null;
+  var itemVarSum = itemCols.reduce(function (s, col) { return s + variance(col); }, 0);
+  var totals = itemCols[0].map(function (_, i) {
+    return itemCols.reduce(function (s, col) { return s + col[i]; }, 0);
+  });
+  var tv = variance(totals);
+  if (tv === 0) return null;
+  return k / (k - 1) * (1 - itemVarSum / tv);
+}
+function leveneTest(groups) {
+  var all = [], dev = [];
+  groups.forEach(function (g, gi) {
+    var m = mean(g);
+    g.forEach(function (x) { all.push(gi); dev.push(Math.abs(x - m)); });
+  });
+  return anovaCalc(all, dev);
+}
+function anovaCalc(catIdx, values) {  /* 回傳 {k, F, df1, df2, p, ssb, ssw, sst, groupStats} */
+  var groups = {};
+  catIdx.forEach(function (c, i) { (groups[c] = groups[c] || []).push(values[i]); });
+  var keys = Object.keys(groups);
+  var k = keys.length, N = values.length, grand = mean(values);
+  var ssb = 0, ssw = 0;
+  var gs = keys.map(function (key) {
+    var g = groups[key], m = mean(g);
+    ssb += g.length * (m - grand) * (m - grand);
+    ssw += g.reduce(function (s, x) { return s + (x - m) * (x - m); }, 0);
+    return { key: key, n: g.length, m: m, sd: sd(g) };
+  });
+  var df1 = k - 1, df2 = N - k;
+  var msb = ssb / df1, msw = df2 > 0 ? ssw / df2 : 0;
+  var F = msw > 0 ? msb / msw : 0;
+  return { k: k, F: F, df1: df1, df2: df2, p: fPValue(F, df1, df2),
+           ssb: ssb, ssw: ssw, sst: ssb + ssw, msw: msw, groupStats: gs };
+}
+function tTestCalc(g1, g2) {
+  var n1 = g1.length, n2 = g2.length;
+  var m1 = mean(g1), m2 = mean(g2), v1 = variance(g1), v2 = variance(g2);
+  var sp2 = ((n1 - 1) * v1 + (n2 - 1) * v2) / (n1 + n2 - 2);
+  var t = (m1 - m2) / Math.sqrt(sp2 * (1 / n1 + 1 / n2));
+  var df = n1 + n2 - 2;
+  var seW = Math.sqrt(v1 / n1 + v2 / n2);
+  var tW = (m1 - m2) / seW;
+  var dfW = seW * seW * seW * seW /
+    ((v1 / n1) * (v1 / n1) / (n1 - 1) + (v2 / n2) * (v2 / n2) / (n2 - 1));
+  var pooledSd = Math.sqrt(sp2);
+  return { n1: n1, n2: n2, m1: m1, m2: m2, sd1: Math.sqrt(v1), sd2: Math.sqrt(v2),
+           t: t, df: df, p: tPValue(t, df),
+           tW: tW, dfW: dfW, pW: tPValue(tW, dfW),
+           d: pooledSd > 0 ? (m1 - m2) / pooledSd : 0 };
+}
+function pearsonCalc(x, y) {
+  var n = x.length, mx = mean(x), my = mean(y);
+  var sxy = 0, sxx = 0, syy = 0;
+  for (var i = 0; i < n; i++) {
+    sxy += (x[i] - mx) * (y[i] - my);
+    sxx += (x[i] - mx) * (x[i] - mx);
+    syy += (y[i] - my) * (y[i] - my);
+  }
+  if (sxx === 0 || syy === 0) return { r: 0, p: 1, n: n };
+  var r = sxy / Math.sqrt(sxx * syy);
+  var t = r * Math.sqrt((n - 2) / (1 - r * r));
+  return { r: r, p: n > 2 ? tPValue(t, n - 2) : 1, n: n };
+}
+function scheffePairs(anovaRes, alpha) {
+  var gs = anovaRes.groupStats, out = [];
+  for (var i = 0; i < gs.length; i++) for (var j = i + 1; j < gs.length; j++) {
+    var diff = gs[i].m - gs[j].m;
+    var denom = anovaRes.msw * (anovaRes.k - 1) * (1 / gs[i].n + 1 / gs[j].n);
+    var F = denom > 0 ? diff * diff / denom : 0;
+    var p = fPValue(F, anovaRes.k - 1, anovaRes.df2);
+    out.push({ a: gs[i].key, b: gs[j].key, diff: diff, p: p, sig: p < alpha });
+  }
+  return out;
+}
+</script>
+<script>
+/* ---------- 資料解析 ---------- */
+var LIKERT = { '非常同意': 5, '同意': 4, '普通': 3, '沒意見': 3, '不同意': 2, '非常不同意': 1,
+               '非常滿意': 5, '滿意': 4, '不滿意': 2, '非常不滿意': 1,
+               '非常喜歡': 5, '喜歡': 4, '不喜歡': 2, '非常不喜歡': 1 };
+var classifiedSignature = '';
+var lastText = '';
+
+function parseRaw(text) {
+  var lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+    .filter(function (l) { return l.trim() !== ''; });
+  if (lines.length < 2) return null;
+  var delim = lines[0].indexOf('\t') >= 0 ? '\t' : ',';
+  function splitLine(l) {
+    if (delim === '\t') return l.split('\t').map(function (s) { return s.trim(); });
+    var out = [], cur = '', inQ = false;
+    for (var i = 0; i < l.length; i++) {
+      var ch = l[i];
+      if (inQ) {
+        if (ch === '"') { if (l[i + 1] === '"') { cur += '"'; i++; } else inQ = false; }
+        else cur += ch;
+      } else if (ch === '"') inQ = true;
+      else if (ch === ',') { out.push(cur.trim()); cur = ''; }
+      else cur += ch;
+    }
+    out.push(cur.trim());
+    return out;
+  }
+  var headers = splitLine(lines[0]);
+  var rows = lines.slice(1).map(splitLine);
+  return { headers: headers, rows: rows };
+}
+function toNumber(v) {
+  if (v === '' || v === null || v === undefined) return null;
+  var n = Number(v);
+  if (!isNaN(n)) return n;
+  if (LIKERT.hasOwnProperty(v)) return LIKERT[v];
+  return null;
+}
+
+/* ---------- 步驟二：欄位分類 ---------- */
+var BG_WORDS = /性別|年級|年齡|系所|系級|班級|年資|單位|科別|職業|婚姻|教育|學校|學院|性向/;
+function classify() {
+  var data = parseRaw(document.getElementById('rawData').value);
+  if (!data) { alert('資料讀不到：請確認第一列是欄名、至少有一列資料'); return; }
+  classifiedSignature = JSON.stringify(data.headers);
+  var body = document.getElementById('clsBody');
+  body.innerHTML = '';
+  data.headers.forEach(function (h, idx) {
+    var vals = data.rows.map(function (r) { return r[idx]; }).filter(function (v) { return v !== ''; });
+    var allNum = vals.length > 0 && vals.every(function (v) { return toNumber(v) !== null; });
+    var isBg = BG_WORDS.test(h) || !allNum;
+    var tr = document.createElement('tr');
+    var constructGuess = h.replace(/[\s\d]+$/, '');
+    tr.innerHTML = '<td class="l">' + escapeHtml(h) + '</td>' +
+      '<td><select id="cls_type_' + idx + '">' +
+      '<option value="bg"' + (isBg ? ' selected' : '') + '>背景變項</option>' +
+      '<option value="item"' + (!isBg ? ' selected' : '') + '>量表題</option></select></td>' +
+      '<td><input type="text" id="cls_con_' + idx + '" value="' + escapeHtml(isBg ? '' : constructGuess) + '"></td>' +
+      '<td><input type="checkbox" id="cls_rev_' + idx + '"></td>';
+    body.appendChild(tr);
+  });
+  var nBg = 0, nItem = 0, cons = {};
+  data.headers.forEach(function (h, idx) {
+    var t = document.getElementById('cls_type_' + idx).value;
+    if (t === 'bg') nBg++;
+    else { nItem++; cons[document.getElementById('cls_con_' + idx).value || h] = true; }
+  });
+  document.getElementById('clsSummary').textContent =
+    '目前：背景變項 ' + nBg + ' 個、量表題目 ' + nItem + ' 題、構面 ' + Object.keys(cons).length + ' 個。改完分類或構面名稱，記得再按一次「開始分析」。';
+  document.getElementById('clsCard').style.display = 'block';
+}
+function collectConfig() {
+  var data = parseRaw(document.getElementById('rawData').value);
+  var cols = data.headers.map(function (h, idx) {
+    return { name: h,
+             type: document.getElementById('cls_type_' + idx).value,
+             construct: (document.getElementById('cls_con_' + idx).value || h).trim(),
+             reverse: document.getElementById('cls_rev_' + idx).checked };
+  });
+  return { data: data, cols: cols,
+           smin: Number(document.getElementById('scaleMin').value) || 1,
+           smax: Number(document.getElementById('scaleMax').value) || 5 };
+}
+function escapeHtml(s) {
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/* ---------- 格式 ---------- */
+function f2(x) { return x.toFixed(2); }
+function f3(x) {  /* .717 型式 */
+  var s = Math.abs(x).toFixed(3);
+  if (Math.abs(x) < 1) s = s.replace(/^0/, '');
+  return (x < 0 ? '-' : '') + s;
+}
+function pShow(p) { return p < 0.001 ? '< .001' : f3(p); }
+function stars(p) { return p < 0.001 ? '***' : p < 0.01 ? '**' : p < 0.05 ? '*' : ''; }
+function alphaJudge(a) {
+  if (a === null) return '—';
+  return a >= 0.9 ? '極佳' : a >= 0.8 ? '良好' : a >= 0.7 ? '可接受' : a >= 0.6 ? '偏低' : '不足';
+}
+function rJudge(r) {
+  var a = Math.abs(r);
+  return a >= 0.7 ? '高度' : a >= 0.4 ? '中度' : a >= 0.1 ? '低度' : '幾乎無';
+}
+
+/* ---------- 分析 ---------- */
+function runAnalysis() {
+  var data0 = parseRaw(document.getElementById('rawData').value);
+  if (!data0) { alert('資料讀不到：請確認第一列是欄名、至少有一列資料'); return; }
+  if (JSON.stringify(data0.headers) !== classifiedSignature) classify();
+  var cfg = collectConfig();
+  var data = cfg.data, cols = cfg.cols;
+  var bgCols = cols.filter(function (c) { return c.type === 'bg'; });
+  var itemCols = cols.filter(function (c) { return c.type === 'item'; });
+  if (!itemCols.length) { alert('至少要有一題量表題'); return; }
+  var constructs = [];
+  itemCols.forEach(function (c) { if (constructs.indexOf(c.construct) < 0) constructs.push(c.construct); });
+
+  /* 每位填答者：背景值、題目分數（反向已換算） */
+  var people = data.rows.map(function (r) {
+    var p = { bg: {}, items: {} };
+    cols.forEach(function (c, idx) {
+      if (c.type === 'bg') p.bg[c.name] = (r[idx] || '').trim();
+      else {
+        var v = toNumber((r[idx] || '').trim());
+        if (v !== null && c.reverse) v = cfg.smin + cfg.smax - v;
+        p.items[c.name] = v;
+      }
+    });
+    return p;
+  });
+  /* 構面分數（該構面全題都有答才算） */
+  people.forEach(function (p) {
+    p.scores = {};
+    constructs.forEach(function (cn) {
+      var its = itemCols.filter(function (c) { return c.construct === cn; });
+      var vals = its.map(function (c) { return p.items[c.name]; });
+      p.scores[cn] = vals.every(function (v) { return v !== null; }) ? mean(vals) : null;
+    });
+  });
+  var N = people.length;
+  var H = [], T = [];  /* HTML 與純文字同步產生 */
+  function sec(title) { H.push('<h3>' + title + '</h3>'); T.push('', title, ''); }
+  function cap(t) { H.push('<p class="cap">' + t + '</p>'); T.push(t); }
+  function note(t) { H.push('<p class="note">' + t + '</p>'); T.push('註：' + t.replace(/^註：/, '')); }
+  function table(headers, rowsHtml, rowsText) {
+    var h = '<div class="tblwrap"><table><thead><tr>' +
+      headers.map(function (x) { return '<th>' + x + '</th>'; }).join('') +
+      '</tr></thead><tbody>' +
+      rowsHtml.map(function (r) { return '<tr>' + r.map(function (c, i) { return '<td' + (i === 0 ? ' class="l"' : '') + '>' + c + '</td>'; }).join('') + '</tr>'; }).join('') +
+      '</tbody></table></div>';
+    H.push(h);
+    T.push(headers.join('\t'));
+    rowsText.forEach(function (r) { T.push(r.join('\t')); });
+  }
+  function points(list) {
+    H.push('<p style="margin-top:10px"><b>統計重點（判讀依據）</b></p><ul class="points">' +
+      list.map(function (x) { return '<li>' + x + '</li>'; }).join('') + '</ul>');
+    T.push('統計重點（判讀依據）');
+    list.forEach(function (x) { T.push('・' + x.replace(/<[^>]+>/g, '')); });
+  }
+  function plain(html) { H.push('<div class="plain"><b>白話說：</b>' + html + '</div>'); }
+
+  /* ===== 第一節 樣本結構 ===== */
+  sec('第一節 樣本結構分析');
+  cap('表4-1 樣本結構分析');
+  var rowsH = [], rowsT = [], pts = ['有效樣本共 ' + N + ' 份。'];
+  bgCols.forEach(function (c) {
+    var counts = {}, order = [];
+    people.forEach(function (p) {
+      var v = p.bg[c.name];
+      if (v === '') return;
+      if (!(v in counts)) { counts[v] = 0; order.push(v); }
+      counts[v]++;
+    });
+    var tot = order.reduce(function (s, k) { return s + counts[k]; }, 0);
+    order.forEach(function (k, i) {
+      var pct = tot > 0 ? (counts[k] / tot * 100) : 0;
+      rowsH.push([(i === 0 ? escapeHtml(c.name) : ''), escapeHtml(k), counts[k], pct.toFixed(1)]);
+      rowsT.push([(i === 0 ? c.name : ''), k, counts[k], pct.toFixed(1)]);
+    });
+    var best = order.slice().sort(function (a, b) { return counts[b] - counts[a]; })[0];
+    pts.push(escapeHtml(c.name) + '：' + order.map(function (k) {
+      return escapeHtml(k) + ' ' + counts[k] + ' 人（' + (counts[k] / tot * 100).toFixed(1) + '%）';
+    }).join('、') + '。人數最多的是' + escapeHtml(best) + '。');
+  });
+  table(['背景變項', '類別', '人數', '百分比（%）'], rowsH, rowsT);
+  note('註：百分比以該題有填答的人數為分母。');
+  pts.push('樣本結構見表4-1。');
+  points(pts);
+  plain('這一節在交代「來填問卷的是哪些人」。人數太偏向某一群（例如九成是女生）時，後面的結論就不能隨便推到所有人，先在這裡交代清楚。');
+
+  /* ===== 第二節 信度 ===== */
+  sec('第二節 信度分析');
+  cap('表4-2 各構面信度分析');
+  rowsH = []; rowsT = []; pts = [];
+  var alphaInfo = {};
+  constructs.forEach(function (cn) {
+    var its = itemCols.filter(function (c) { return c.construct === cn; });
+    var complete = people.filter(function (p) { return p.scores[cn] !== null; });
+    var itemData = its.map(function (c) {
+      return complete.map(function (p) { return p.items[c.name]; });
+    });
+    var a = cronbachAlpha(itemData);
+    alphaInfo[cn] = a;
+    rowsH.push([escapeHtml(cn), its.length, complete.length, a === null ? '—' : f3(a), alphaJudge(a)]);
+    rowsT.push([cn, its.length, complete.length, a === null ? '—' : f3(a), alphaJudge(a)]);
+    pts.push(escapeHtml(cn) + '：' + its.length + ' 題，有效樣本 ' + complete.length +
+      ' 份，Cronbach\'s α = ' + (a === null ? '—' : f3(a)) + '（' + alphaJudge(a) + '）。' +
+      (its.some(function (c) { return c.reverse; }) ? '反向題已先換算計分。' : ''));
+  });
+  table(['構面', '題數', '有效樣本', 'Cronbach\'s α', '判讀'], rowsH, rowsT);
+  note('註：判讀採常見慣例：α ≥ .90 極佳、.80 良好、.70 可接受、.60 偏低、未達 .60 不足。');
+  pts.push('信度結果見表4-2。');
+  points(pts);
+  plain('信度在問「同一個構面的幾道題目，答案是不是一致」。α 愈接近 1 愈一致；低於 .70 要小心，可能有題目寫得讓人誤會，或把不是同一件事的題目放在一起。');
+
+  /* ===== 第三節 描述統計 ===== */
+  sec('第三節 描述性統計分析');
+  cap('表4-3 各構面描述性統計');
+  rowsH = []; rowsT = []; pts = [];
+  var mid = (cfg.smin + cfg.smax) / 2;
+  pts.push('量表為 ' + cfg.smin + ' 至 ' + cfg.smax + ' 分，中間值為 ' + mid.toFixed(1) + '。');
+  var descList = constructs.map(function (cn) {
+    var vals = people.map(function (p) { return p.scores[cn]; }).filter(function (v) { return v !== null; });
+    return { cn: cn, n: vals.length, m: mean(vals), s: sd(vals),
+             items: itemCols.filter(function (c) { return c.construct === cn; }) };
+  });
+  var ranked = descList.slice().sort(function (a, b) { return b.m - a.m; });
+  descList.forEach(function (d) {
+    var rank = ranked.indexOf(d) + 1;
+    rowsH.push([escapeHtml(d.cn), d.items.length, f2(d.m), f2(d.s), rank]);
+    rowsT.push([d.cn, d.items.length, f2(d.m), f2(d.s), rank]);
+  });
+  table(['構面', '題數', '平均數', '標準差', '排序'], rowsH, rowsT);
+  cap('表4-4 各題項描述性統計');
+  rowsH = []; rowsT = [];
+  descList.forEach(function (d) {
+    d.items.forEach(function (c, i) {
+      var vals = people.map(function (p) { return p.items[c.name]; }).filter(function (v) { return v !== null; });
+      rowsH.push([(i === 0 ? escapeHtml(d.cn) : ''), escapeHtml(c.name) + (c.reverse ? '（反向）' : ''), f2(mean(vals)), f2(sd(vals))]);
+      rowsT.push([(i === 0 ? d.cn : ''), c.name + (c.reverse ? '（反向）' : ''), f2(mean(vals)), f2(sd(vals))]);
+      d['item_' + c.name] = { m: mean(vals), s: sd(vals) };
+    });
+  });
+  table(['構面', '題項', '平均數', '標準差'], rowsH, rowsT);
+  descList.forEach(function (d) {
+    var itemPts = d.items.map(function (c) { return { name: c.name, m: d['item_' + c.name].m }; });
+    var hi = itemPts.slice().sort(function (a, b) { return b.m - a.m; })[0];
+    var lo = itemPts.slice().sort(function (a, b) { return a.m - b.m; })[0];
+    pts.push(escapeHtml(d.cn) + '：平均數 ' + f2(d.m) + '、標準差 ' + f2(d.s) + '，' +
+      (d.m > mid ? '高於' : d.m < mid ? '低於' : '等於') + '中間值；題項中最高的是「' + escapeHtml(hi.name) +
+      '」（' + f2(hi.m) + '），最低的是「' + escapeHtml(lo.name) + '」（' + f2(lo.m) + '）。');
+  });
+  pts.push('各構面平均數由高到低：' + ranked.map(function (d) { return escapeHtml(d.cn) + '（' + f2(d.m) + '）'; }).join('、') + '。');
+  pts.push('構面見表4-3，題項見表4-4。');
+  points(pts);
+  plain('描述統計在看「大家整體偏向哪邊」。平均數高於中間值（5 點量表是 3）就是偏正向；標準差大，表示大家意見分散，標準差小，表示看法比較一致。');
+
+  /* ===== 第四節 差異分析 ===== */
+  sec('第四節 背景變項之差異分析');
+  var tblNo = 5;
+  var diffResults = {};  /* diffResults[bg][construct] = {sig, kind} */
+  bgCols.forEach(function (c) {
+    diffResults[c.name] = {};
+    var cats = [], seen = {};
+    people.forEach(function (p) {
+      var v = p.bg[c.name];
+      if (v !== '' && !seen[v]) { seen[v] = true; cats.push(v); }
+    });
+    constructs.forEach(function (cn) {
+      var groups = cats.map(function (cat) {
+        return { cat: cat, vals: people.filter(function (p) { return p.bg[c.name] === cat && p.scores[cn] !== null; })
+                                        .map(function (p) { return p.scores[cn]; }) };
+      }).filter(function (g) { return g.vals.length >= 2; });
+      if (groups.length < 2) { diffResults[c.name][cn] = null; return; }
+      if (groups.length === 2) {
+        var tt = tTestCalc(groups[0].vals, groups[1].vals);
+        var lev = leveneTest([groups[0].vals, groups[1].vals]);
+        var useWelch = lev.p < 0.05;
+        var tUse = useWelch ? tt.tW : tt.t, pUse = useWelch ? tt.pW : tt.p;
+        var dfUse = useWelch ? tt.dfW : tt.df;
+        cap('表4-' + (tblNo++) + ' 不同' + escapeHtml(c.name) + '在' + escapeHtml(cn) + '之差異分析（獨立樣本 t 檢定）');
+        var rh = [[escapeHtml(cn),
+          escapeHtml(groups[0].cat) + ' M（SD）', escapeHtml(groups[1].cat) + ' M（SD）', 't', 'p', 'Cohen\'s d']];
+        var rt = [[cn, groups[0].cat + ' M（SD）', groups[1].cat + ' M（SD）', 't', 'p', 'Cohen\'s d']];
+        var rowH = ['', f2(tt.m1) + '（' + f2(tt.sd1) + '）', f2(tt.m2) + '（' + f2(tt.sd2) + '）',
+                    f2(tUse), pShow(pUse), f2(tt.d)];
+        var rowT = ['', f2(tt.m1) + '（' + f2(tt.sd1) + '）', f2(tt.m2) + '（' + f2(tt.sd2) + '）',
+                    f2(tUse), pShow(pUse), f2(tt.d)];
+        H.push('<div class="tblwrap"><table><thead><tr>' + rh[0].map(function (x) { return '<th>' + x + '</th>'; }).join('') +
+          '</tr></thead><tbody><tr>' + rowH.map(function (x, i) { return '<td' + (i === 0 ? ' class="l"' : '') + '>' + x + '</td>'; }).join('') + '</tr></tbody></table></div>');
+        T.push(rt[0].join('\t')); T.push(rowT.join('\t'));
+        note('註：* p < .05，** p < .01，*** p < .001。Levene 檢定 F = ' + f2(lev.F) + '，p = ' + pShow(lev.p) +
+             (useWelch ? '，變異數不同質，本表採 Welch 校正之 t 值。' : '，變異數同質。'));
+        points(['不同' + escapeHtml(c.name) + '在' + escapeHtml(cn) + '（表4-' + (tblNo - 1) + '）：' +
+          escapeHtml(groups[0].cat) + '（n = ' + tt.n1 + '，M = ' + f2(tt.m1) + '，SD = ' + f2(tt.sd1) + '）、' +
+          escapeHtml(groups[1].cat) + '（n = ' + tt.n2 + '，M = ' + f2(tt.m2) + '，SD = ' + f2(tt.sd2) + '）。' +
+          't(' + (useWelch ? dfUse.toFixed(2) : dfUse) + ') = ' + f2(tUse) + '，p = ' + pShow(pUse) + '，' +
+          (pUse < 0.05 ? '<span class="sig">達顯著</span>' : '未達顯著') + '；Cohen\'s d = ' + f2(tt.d) + '。']);
+        diffResults[c.name][cn] = { sig: pUse < 0.05, kind: 't' };
+      } else {
+        var catIdx = [], vals = [];
+        people.forEach(function (p) {
+          if (p.scores[cn] === null || p.bg[c.name] === '') return;
+          var gi = cats.indexOf(p.bg[c.name]);
+          if (gi < 0) return;
+          if (groups.some(function (g) { return g.cat === p.bg[c.name]; })) { catIdx.push(gi); vals.push(p.scores[cn]); }
+        });
+        var av = anovaCalc(catIdx, vals);
+        var eta2 = av.sst > 0 ? av.ssb / av.sst : 0;
+        var pairs = scheffePairs(av, 0.05);
+        var sigPairs = pairs.filter(function (x) { return x.sig; });
+        var postTxt = av.p >= 0.05 ? '—' :
+          (sigPairs.length ? sigPairs.map(function (x) {
+             var ga = av.groupStats.filter(function (g) { return g.key == x.a; })[0];
+             var gb = av.groupStats.filter(function (g) { return g.key == x.b; })[0];
+             return escapeHtml(cats[Number(x.a)]) + (ga.m > gb.m ? ' > ' : ' < ') + escapeHtml(cats[Number(x.b)]);
+           }).join('；') : '兩兩比較皆未達顯著');
+        cap('表4-' + (tblNo++) + ' 不同' + escapeHtml(c.name) + '在' + escapeHtml(cn) + '之差異分析（單因子變異數分析）');
+        var headH = [escapeHtml(cn)].concat(av.groupStats.map(function (g) { return escapeHtml(cats[Number(g.key)]) + ' M（SD）'; }))
+          .concat(['F', 'p', '事後比較（Scheffé）']);
+        var headT = [cn].concat(av.groupStats.map(function (g) { return cats[Number(g.key)] + ' M（SD）'; }))
+          .concat(['F', 'p', '事後比較（Scheffé）']);
+        var bodyH = [''].concat(av.groupStats.map(function (g) { return f2(g.m) + '（' + f2(g.sd) + '）'; }))
+          .concat([f2(av.F) + stars(av.p), pShow(av.p), postTxt]);
+        var bodyT = [''].concat(av.groupStats.map(function (g) { return f2(g.m) + '（' + f2(g.sd) + '）'; }))
+          .concat([f2(av.F) + stars(av.p), pShow(av.p), postTxt.replace(/<[^>]+>/g, '')]);
+        H.push('<div class="tblwrap"><table><thead><tr>' + headH.map(function (x) { return '<th>' + x + '</th>'; }).join('') +
+          '</tr></thead><tbody><tr>' + bodyH.map(function (x, i) { return '<td' + (i === 0 ? ' class="l"' : '') + '>' + x + '</td>'; }).join('') + '</tr></tbody></table></div>');
+        T.push(headT.join('\t')); T.push(bodyT.join('\t'));
+        note('註：* p < .05，** p < .01，*** p < .001。');
+        var pt = '不同' + escapeHtml(c.name) + '在' + escapeHtml(cn) + '（表4-' + (tblNo - 1) + '）：' +
+          av.groupStats.map(function (g) {
+            return escapeHtml(cats[Number(g.key)]) + '（n = ' + g.n + '，M = ' + f2(g.m) + '，SD = ' + f2(g.sd) + '）';
+          }).join('、') + '。F(' + av.df1 + ', ' + av.df2 + ') = ' + f2(av.F) + '，p = ' + pShow(av.p) + '，' +
+          (av.p < 0.05 ? '<span class="sig">達顯著</span>' : '未達顯著') + '；η² = ' + f3(eta2) + '。';
+        if (av.p < 0.05) {
+          pt += sigPairs.length ? 'Scheffé 事後比較：' + sigPairs.map(function (x) {
+            var ga = av.groupStats.filter(function (g) { return g.key == x.a; })[0];
+            var gb = av.groupStats.filter(function (g) { return g.key == x.b; })[0];
+            return escapeHtml(cats[Number(x.a)]) + (ga.m > gb.m ? '顯著高於' : '顯著低於') + escapeHtml(cats[Number(x.b)]) + '（p = ' + pShow(x.p) + '）';
+          }).join('；') + '。' : 'Scheffé 事後比較兩兩之間皆未達顯著（Scheffé 法較保守）。';
+        }
+        points([pt]);
+        diffResults[c.name][cn] = { sig: av.p < 0.05, kind: 'anova' };
+      }
+    });
+  });
+  plain('差異分析在問「不同背景的人，看法有沒有不一樣」。p 小於 .05 才算「有顯著差異」；沒顯著就照實寫沒有差異，這也是正式的結果，不是失敗。');
+
+  /* ===== 第五節 相關 ===== */
+  sec('第五節 相關分析');
+  cap('表4-' + (tblNo++) + ' 各構面之 Pearson 積差相關');
+  rowsH = []; rowsT = []; pts = [];
+  var corrInfo = {};
+  constructs.forEach(function (c1, i) {
+    var rh = [escapeHtml((i + 1) + '. ' + c1)], rt = [(i + 1) + '. ' + c1];
+    constructs.forEach(function (c2, j) {
+      if (j < i) {
+        var both = people.filter(function (p) { return p.scores[c1] !== null && p.scores[c2] !== null; });
+        var res = pearsonCalc(both.map(function (p) { return p.scores[c1]; }), both.map(function (p) { return p.scores[c2]; }));
+        corrInfo[c1 + '|' + c2] = res; corrInfo[c2 + '|' + c1] = res;
+        rh.push(f3(res.r) + stars(res.p)); rt.push(f3(res.r) + stars(res.p));
+      } else if (j === i) { rh.push('1'); rt.push('1'); }
+      else { rh.push(''); rt.push(''); }
+    });
+    rowsH.push(rh); rowsT.push(rt);
+  });
+  var corrHead = ['構面'].concat(constructs.map(function (_, i) { return String(i + 1); }));
+  table(corrHead, rowsH, rowsT);
+  note('註：* p < .05，** p < .01，*** p < .001。相關強度採常見慣例：|r| ≥ .70 高度、.40～.69 中度、.10～.39 低度。');
+  constructs.forEach(function (c1, i) {
+    constructs.forEach(function (c2, j) {
+      if (j <= i) return;
+      var res = corrInfo[c1 + '|' + c2];
+      pts.push(escapeHtml(c1) + '與' + escapeHtml(c2) + '：r = ' + f3(res.r) + '，n = ' + res.n + '，p ' +
+        (res.p < 0.001 ? '< .001' : '= ' + f3(res.p)) + '，' +
+        (res.p < 0.05 ? '<span class="sig">達顯著</span>，屬' + rJudge(res.r) + (res.r >= 0 ? '正' : '負') + '相關。' : '未達顯著。'));
+    });
+  });
+  pts.push('相關結果見表4-' + (tblNo - 1) + '。');
+  points(pts);
+  plain('相關在問「兩個構面會不會一起變大變小」。r 介於 -1 到 1：正數是同方向，負數是反方向，絕對值愈大關係愈強。注意：相關不等於因果，不能寫成「因為服務品質好，所以滿意度高」，只能寫「兩者有正向關聯」。');
+
+  /* ===== 第六節 假設驗證 ===== */
+  sec('第六節 研究假設驗證結果');
+  cap('表4-' + (tblNo++) + ' 研究假設驗證結果彙整');
+  rowsH = []; rowsT = []; pts = [];
+  var hNo = 0;
+  constructs.forEach(function (cn) {
+    hNo++;
+    var subs = bgCols.map(function (c) { return diffResults[c.name][cn]; });
+    var tested = subs.filter(function (s) { return s !== null; });
+    var sigN = tested.filter(function (s) { return s.sig; }).length;
+    var overall = tested.length === 0 ? '未檢定' : sigN === 0 ? '不成立' : sigN === tested.length ? '成立' : '部分成立';
+    rowsH.push(['H' + hNo, '不同背景變項之填答者在' + escapeHtml(cn) + '上有顯著差異', overall]);
+    rowsT.push(['H' + hNo, '不同背景變項之填答者在' + cn + '上有顯著差異', overall]);
+    bgCols.forEach(function (c, bi) {
+      var s = diffResults[c.name][cn];
+      rowsH.push(['H' + hNo + '-' + (bi + 1), '不同' + escapeHtml(c.name) + '之填答者在' + escapeHtml(cn) + '上有顯著差異', s === null ? '未檢定（組別人數不足）' : s.sig ? '成立' : '不成立']);
+      rowsT.push(['H' + hNo + '-' + (bi + 1), '不同' + c.name + '之填答者在' + cn + '上有顯著差異', s === null ? '未檢定（組別人數不足）' : s.sig ? '成立' : '不成立']);
+    });
+    pts.push('H' + hNo + '（' + escapeHtml(cn) + '的背景差異）：' + tested.length + ' 項中 ' + sigN + ' 項達顯著，' + overall + '。');
+  });
+  hNo++;
+  var pairKeys = Object.keys(corrInfo).filter(function (k) { return constructs.indexOf(k.split('|')[0]) < constructs.indexOf(k.split('|')[1]); });
+  var pairSig = pairKeys.filter(function (k) { return corrInfo[k].p < 0.05; }).length;
+  var corrOverall = pairKeys.length === 0 ? '未檢定' : pairSig === 0 ? '不成立' : pairSig === pairKeys.length ? '成立' : '部分成立';
+  rowsH.push(['H' + hNo, '各構面之間有顯著相關', corrOverall]);
+  rowsT.push(['H' + hNo, '各構面之間有顯著相關', corrOverall]);
+  pairKeys.forEach(function (k, i) {
+    var parts = k.split('|');
+    rowsH.push(['H' + hNo + '-' + (i + 1), escapeHtml(parts[0]) + '與' + escapeHtml(parts[1]) + '有顯著相關', corrInfo[k].p < 0.05 ? '成立' : '不成立']);
+    rowsT.push(['H' + hNo + '-' + (i + 1), parts[0] + '與' + parts[1] + '有顯著相關', corrInfo[k].p < 0.05 ? '成立' : '不成立']);
+  });
+  pts.push('H' + hNo + '（構面間相關）：' + pairKeys.length + ' 組中 ' + pairSig + ' 組達顯著，' + corrOverall + '。');
+  table(['假設', '內容', '結果'], rowsH, rowsT);
+  pts.push('彙整見表4-' + (tblNo - 1) + '。假設是依你的資料自動列的，請對照第一章的研究假設調整編號與文字。');
+  points(pts);
+
+  var title = document.getElementById('titleInput').value.trim();
+  document.getElementById('report').innerHTML = H.join('\n');
+  lastText = (title ? '研究題目：' + title + '\n' : '') + '第四章 研究結果\n' + T.join('\n');
+  document.getElementById('results').style.display = 'block';
+  document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+}
+
+/* ---------- 匯出 ---------- */
+function copyAll() {
+  if (!lastText) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(lastText).then(function () { alert('已複製全部結果，去 Word 貼上就能用'); });
+  else alert(lastText);
+}
+function downloadWord() {
+  var title = document.getElementById('titleInput').value.trim();
+  var html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word">' +
+    '<head><meta charset="utf-8"><title>第四章 研究結果</title></head><body>' +
+    (title ? '<p><b>' + escapeHtml(title) + '</b></p>' : '') +
+    '<h2>第四章 研究結果</h2>' + document.getElementById('report').innerHTML + '</body></html>';
+  var blob = new Blob(['\ufeff' + html], { type: 'application/msword' });
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = '第四章研究結果.doc';
+  document.body.appendChild(a); a.click();
+  setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+}
+
+/* ---------- 示範資料 ---------- */
+var DEMO = '性別\t年級\t服務品質1\t服務品質2\t服務品質3\t服務品質4\t滿意度1\t滿意度2\t滿意度3\t忠誠度1\t忠誠度2\t忠誠度3\n' +
+'男\t一年級\t3\t3\t3\t2\t4\t4\t4\t3\t3\t3\n' +
+'女\t二年級\t4\t3\t4\t4\t4\t2\t4\t4\t3\t3\n' +
+'男\t三年級\t3\t2\t2\t3\t2\t3\t2\t3\t4\t4\n' +
+'女\t四年級\t3\t2\t3\t3\t3\t3\t3\t4\t4\t3\n' +
+'男\t一年級\t3\t3\t3\t3\t4\t3\t3\t4\t3\t3\n' +
+'女\t二年級\t3\t4\t3\t3\t5\t4\t4\t4\t3\t4\n' +
+'男\t三年級\t3\t4\t3\t3\t4\t3\t3\t4\t3\t4\n' +
+'女\t四年級\t3\t3\t3\t3\t3\t3\t3\t4\t3\t3\n' +
+'男\t一年級\t3\t3\t3\t3\t4\t3\t4\t2\t3\t3\n' +
+'女\t二年級\t4\t2\t3\t4\t4\t3\t4\t4\t2\t4\n' +
+'男\t三年級\t2\t3\t3\t2\t3\t4\t2\t3\t2\t2\n' +
+'女\t四年級\t4\t4\t4\t3\t4\t4\t4\t4\t3\t5\n' +
+'男\t一年級\t3\t2\t3\t3\t3\t3\t3\t3\t3\t4\n' +
+'女\t二年級\t4\t3\t3\t2\t3\t4\t3\t4\t3\t4\n' +
+'男\t三年級\t3\t3\t2\t2\t3\t3\t2\t3\t3\t2\n' +
+'女\t四年級\t4\t4\t4\t4\t4\t4\t5\t4\t4\t4\n' +
+'男\t一年級\t4\t3\t3\t4\t4\t3\t3\t3\t3\t2\n' +
+'女\t二年級\t3\t3\t3\t3\t5\t5\t5\t3\t4\t4\n' +
+'男\t三年級\t3\t4\t3\t3\t3\t4\t4\t4\t4\t4\n' +
+'女\t四年級\t4\t4\t3\t4\t5\t4\t4\t5\t3\t4\n' +
+'男\t一年級\t4\t4\t3\t3\t3\t4\t4\t3\t3\t3\n' +
+'女\t二年級\t2\t3\t5\t4\t4\t5\t5\t4\t4\t4\n' +
+'男\t三年級\t3\t4\t4\t4\t3\t4\t3\t5\t3\t3\n' +
+'女\t四年級\t4\t4\t4\t4\t3\t2\t3\t3\t3\t3\n' +
+'男\t一年級\t4\t4\t4\t4\t5\t4\t4\t4\t4\t3\n' +
+'女\t二年級\t3\t2\t3\t3\t2\t4\t4\t2\t2\t3\n' +
+'男\t三年級\t3\t2\t3\t3\t3\t4\t3\t3\t4\t3\n' +
+'女\t四年級\t5\t3\t4\t3\t3\t4\t4\t5\t4\t4\n' +
+'男\t一年級\t3\t3\t4\t4\t4\t4\t4\t3\t3\t3\n' +
+'女\t二年級\t4\t4\t4\t4\t5\t4\t4\t3\t4\t4\n' +
+'男\t三年級\t4\t3\t4\t2\t4\t3\t5\t4\t3\t4\n' +
+'女\t四年級\t4\t3\t5\t4\t5\t4\t4\t4\t4\t4\n' +
+'男\t一年級\t3\t3\t3\t2\t4\t3\t4\t3\t3\t3\n' +
+'女\t二年級\t3\t3\t3\t4\t5\t4\t4\t3\t3\t3\n' +
+'男\t三年級\t4\t5\t4\t4\t5\t5\t5\t5\t4\t4\n' +
+'女\t四年級\t3\t4\t3\t3\t4\t4\t3\t4\t4\t4\n' +
+'男\t一年級\t4\t3\t3\t4\t3\t3\t3\t3\t3\t4\n' +
+'女\t二年級\t3\t3\t3\t3\t3\t3\t3\t4\t4\t3\n' +
+'男\t三年級\t4\t4\t4\t4\t4\t5\t4\t4\t4\t4\n' +
+'女\t四年級\t4\t4\t4\t3\t3\t4\t5\t3\t3\t4\n' +
+'男\t一年級\t3\t3\t2\t3\t3\t3\t3\t3\t3\t3\n' +
+'女\t二年級\t3\t2\t4\t3\t4\t4\t4\t4\t3\t4\n' +
+'男\t三年級\t3\t4\t3\t4\t4\t3\t3\t3\t3\t3\n' +
+'女\t四年級\t3\t3\t2\t4\t3\t3\t4\t3\t4\t3\n' +
+'男\t一年級\t3\t3\t3\t4\t2\t4\t3\t2\t2\t2\n' +
+'女\t二年級\t3\t3\t3\t4\t5\t3\t4\t4\t5\t4\n' +
+'男\t三年級\t3\t2\t3\t4\t3\t3\t3\t4\t4\t3\n' +
+'女\t四年級\t3\t4\t4\t4\t5\t4\t4\t4\t3\t4\n' +
+'男\t一年級\t3\t3\t4\t4\t4\t4\t3\t3\t3\t3\n' +
+'女\t二年級\t3\t3\t3\t3\t4\t5\t4\t5\t4\t4\n' +
+'男\t三年級\t4\t4\t4\t3\t4\t4\t4\t4\t4\t4\n' +
+'女\t四年級\t5\t5\t4\t5\t5\t4\t4\t4\t5\t4\n' +
+'男\t一年級\t3\t3\t2\t3\t3\t3\t3\t2\t2\t2\n' +
+'女\t二年級\t2\t3\t2\t2\t4\t3\t3\t2\t3\t2\n' +
+'男\t三年級\t4\t3\t3\t4\t5\t5\t4\t4\t3\t4\n' +
+'女\t四年級\t5\t4\t4\t4\t2\t4\t3\t5\t3\t3\n' +
+'男\t一年級\t3\t3\t2\t3\t2\t2\t2\t2\t2\t2\n' +
+'女\t二年級\t3\t4\t3\t4\t4\t2\t2\t2\t3\t4\n' +
+'男\t三年級\t4\t4\t4\t5\t4\t4\t5\t5\t4\t4\n' +
+'女\t四年級\t3\t4\t3\t4\t4\t4\t4\t4\t3\t4';
+(function () {
+  document.getElementById('rawData').value = DEMO;
+  classify();
+  runAnalysis();
+})();
+</script>
+</body>
+</html>
